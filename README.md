@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/jobiols/meli_oerp.svg?branch=master)](https://travis-ci.org/jobiols/meli_oerp)
+
 meli_oerp
 =========
 
