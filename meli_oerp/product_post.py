@@ -19,8 +19,9 @@
 #
 ##############################################################################
 
-from openerp.osv import fields, osv
-from openerp.tools.translate import _
+from odoo import fields, osv, models, _
+from odoo.tools.translate import _
+import pdb
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -36,29 +37,29 @@ from warning import warning
 import melisdk
 from melisdk.meli import Meli
 
-class product_post(osv.osv_memory):
+class product_post(models.TransientModel):
     _name = "mercadolibre.product.post"
     _description = "Wizard de Product Posting en MercadoLibre"
 
-    _columns = {
-	    'type': fields.selection([('post','Alta'),('put','Editado'),('delete','Borrado')], string='Tipo de operación' ),
-	    'posting_date': fields.date('Fecha del posting'),
+    type = fields.Selection([('post','Alta'),('put','Editado'),('delete','Borrado')], string='Tipo de operación' );
+    posting_date = fields.Date('Fecha del posting');
 	    #'company_id': fields.many2one('res.company',string='Company'),
 	    #'mercadolibre_state': fields.related( 'res.company', 'mercadolibre_state', string="State" )
-    }
 
-    def pretty_json( self, cr, uid, ids, data, indent=0, context=None ):
+
+    def pretty_json( self, data ):
         return json.dumps( data, sort_keys=False, indent=4 )
 
-    def product_post(self, cr, uid, ids, context=None):
-
+    def product_post(self, context):
+        #pdb.set_trace()
+        company = self.env.user.company_id
         product_ids = context['active_ids']
-        product_obj = self.pool.get('product.product')
+        product_obj = self.env['product.product']
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
+        #user_obj = self.pool.get('res.users').browse(cr, uid, uid)
         #user_obj.company_id.meli_login()
-        company = user_obj.company_id
-        warningobj = self.pool.get('warning')
+        #company = user_obj.company_id
+        warningobj = self.env['warning']
 
         #company = self.pool.get('res.company').browse(cr,uid,1)
 
@@ -71,7 +72,7 @@ class product_post(osv.osv_memory):
 
         meli = Meli(client_id=CLIENT_ID,client_secret=CLIENT_SECRET, access_token=ACCESS_TOKEN, refresh_token=REFRESH_TOKEN)
 
-        if ACCESS_TOKEN=='':
+        if ACCESS_TOKEN=='' or ACCESS_TOKEN==False:
             meli = Meli(client_id=CLIENT_ID,client_secret=CLIENT_SECRET)
             url_login_meli = meli.auth_url(redirect_URI=REDIRECT_URI)
             return {
@@ -81,7 +82,7 @@ class product_post(osv.osv_memory):
             }
 
         for product_id in product_ids:
-            product = product_obj.browse(cr,uid,product_id)
+            product = product_obj.browse(product_id)
 
             if (product.meli_id):
                 response = meli.get("/items/%s" % product.meli_id, {'access_token':meli.access_token})
@@ -110,10 +111,12 @@ class product_post(osv.osv_memory):
                 #"pictures": [ { 'source': product.meli_imagen_logo} ] ,
                 "video_id": product.meli_video  or '',
             }
-            print "product.meli_id before setting condigions ]"+product.meli_id+"["
-            if (len(product.meli_id)==0):
-                body["condition"] = product.meli_condition;
-
+            #print "product.meli_id before setting conditions ]"+product.meli_id+"["
+            if (product.meli_id):
+                if (len(product.meli_id)==0):
+                    body["condition"] = product.meli_condition
+            else:
+                body["condition"] = product.meli_condition
             # print body
 
             assign_img = False and product.meli_id
@@ -151,48 +154,46 @@ class product_post(osv.osv_memory):
 
             #publicando multiples imagenes
             multi_images_ids = {}
-            if (product.images):
+            if "images" in product:
                 # print 'website_multi_images presente:   ', product.images
                 #recorrer las imagenes y publicarlas
                 multi_images_ids = product.product_meli_upload_multi_images()
 
             #asignando imagen de logo (por source)
-            if product.meli_imagen_logo:
-                if product.meli_imagen_id:
-                    if 'pictures' in body.keys():
-                        body["pictures"]+= [ { 'id': product.meli_imagen_id } ]
-                    else:
-                        body["pictures"] = [ { 'id': product.meli_imagen_id } ]
-
-                        if (multi_images_ids):
-                            if 'pictures' in body.keys():
-                                body["pictures"]+= multi_images_ids
-                            else:
-                                body["pictures"] = multi_images_ids
-
-                    if 'pictures' in body.keys():
-                        body["pictures"]+= [ { 'source': product.meli_imagen_logo} ]
-                    else:
-                        body["pictures"]+= [ { 'source': product.meli_imagen_logo} ]
+            if product.meli_imagen_id:
+                if 'pictures' in body.keys():
+                    body["pictures"]+= [ { 'id': product.meli_imagen_id } ]
                 else:
-                    imagen_producto = ""
-                    if (product.meli_description!="" and product.meli_description!=False and product.meli_imagen_link!=""):
-                        imgtag = "<img style='width: 420px; height: auto;' src='%s'/>" % ( product.meli_imagen_link )
-                        result = product.meli_description.replace( "[IMAGEN_PRODUCTO]", imgtag )
-                        if (result):
-                            _logger.info( "result: %s" % (result) )
-                            product.meli_description = result
-                        else:
-                            result = product.meli_description
+                    body["pictures"] = [ { 'id': product.meli_imagen_id } ]
 
-
+                if (multi_images_ids):
+                    if 'pictures' in body.keys():
+                        body["pictures"]+= multi_images_ids
+                    else:
+                        body["pictures"] = multi_images_ids
 
             else:
-                return warningobj.info(cr, uid, title='MELI WARNING', message="Debe completar el campo 'Imagen_Logo' con el url: http://www.nuevohorizonte-sa.com.ar/images/logo1.png", message_html="")
+                imagen_producto = ""
+                if (product.meli_description!="" and product.meli_description!=False and product.meli_imagen_link!=""):
+                    imgtag = "<img style='width: 420px; height: auto;' src='%s'/>" % ( product.meli_imagen_link )
+                    result = product.meli_description.replace( "[IMAGEN_PRODUCTO]", imgtag )
+                    if (result):
+                        _logger.info( "result: %s" % (result) )
+                        product.meli_description = result
+                    else:
+                        result = product.meli_description
+
+            if product.meli_imagen_logo:
+                if 'pictures' in body.keys():
+                    body["pictures"]+= [ { 'source': product.meli_imagen_logo} ]
+                else:
+                    body["pictures"]= [ { 'source': product.meli_imagen_logo} ]
+#            else:
+#                return warningobj.info( title='MELI WARNING', message="Debe completar el campo 'Imagen_Logo' con un url a la imagen.", message_html="")
 
             #check fields
             if product.meli_description==False:
-                return warningobj.info(cr, uid, title='MELI WARNING', message="Debe completar el campo 'description' (en html)", message_html="")
+                return warningobj.info( title='MELI WARNING', message="Debe completar el campo 'description' (en html)", message_html="")
 
             #put for editing, post for creating
             if product.meli_id:
@@ -219,10 +220,10 @@ class product_post(osv.osv_memory):
                     url_login_meli = meli.auth_url(redirect_URI=REDIRECT_URI)
                     #print "url_login_meli:", url_login_meli
                     #raise osv.except_osv( _('MELI WARNING'), _('INVALID TOKEN or EXPIRED TOKEN (must login, go to Edit Company and login):  error: %s, message: %s, status: %s') % ( rjson["error"], rjson["message"],rjson["status"],))
-                    return warningobj.info(cr, uid, title='MELI WARNING', message="Debe iniciar sesión en MELI.  ", message_html="")
+                    return warningobj.info(title='MELI WARNING', message="Debe iniciar sesión en MELI.  ", message_html="")
                 else:
                      #Any other errors
-                    return warningobj.info(cr, uid, title='MELI WARNING', message="Completar todos los campos!  ", message_html="<br><br>"+missing_fields )
+                    return warningobj.info(title='MELI WARNING', message="Completar todos los campos!  ", message_html="<br><br>"+missing_fields )
 
             #last modifications if response is OK
             if "id" in rjson:
@@ -230,10 +231,10 @@ class product_post(osv.osv_memory):
 
             posting_fields = {'posting_date': str(datetime.now()),'meli_id':rjson['id'],'product_id':product.id,'name': 'Post: ' + product.meli_title }
 
-            posting_id = self.pool.get('mercadolibre.posting').search(cr,uid,[('meli_id','=',rjson['id'])])
+            posting_id = self.env['mercadolibre.posting'].search([('meli_id','=',rjson['id'])]).id
 
             if not posting_id:
-	            posting_id = self.pool.get('mercadolibre.posting').create(cr,uid,(posting_fields))
+	            posting_id = self.env['mercadolibre.posting'].create((posting_fields)).id
 
 
         return {}

@@ -19,9 +19,10 @@
 #
 ##############################################################################
 
-from openerp import models, fields, api, _
-from openerp.osv import fields, osv
-from openerp.tools.translate import _
+from odoo import models, fields, api, osv
+from odoo.tools.translate import _
+
+import pdb
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -38,114 +39,44 @@ from meli_oerp_config import *
 from melisdk.meli import Meli
 
 
-class product_template(osv.osv):
+class product_template(models.Model):
     _inherit = "product.template"
-    _columns = {
-      'name': fields.char('Name', size=128, required=True, translate=False, select=True)
-    }
+    name = fields.Char('Name', size=128, required=True, translate=False, select=True);
+
 product_template()
 
-class product_product(osv.osv):
+class product_product(models.Model):
 
     _inherit = "product.product"
 
-    @api.one
+    #@api.one
     @api.onchange('lst_price') # if these fields are changed, call method
     def check_change_price(self):
-        #import pdb;pdb.set_trace();
+        #pdb.set_trace();
         pricelists = self.env['product.pricelist'].search([])
-        pricelist = pricelists[0]
-
-        return {}
-
-    def product_meli_get_products( self, cr, uid, context=None ):
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        #product = product_obj.browse(cr, uid, ids[0])
-
-        CLIENT_ID = company.mercadolibre_client_id
-        CLIENT_SECRET = company.mercadolibre_secret_key
-        ACCESS_TOKEN = company.mercadolibre_access_token
-        REFRESH_TOKEN = company.mercadolibre_refresh_token
-
-        meli = Meli(client_id=CLIENT_ID,client_secret=CLIENT_SECRET, access_token=ACCESS_TOKEN, refresh_token=REFRESH_TOKEN)
-
-        url_login_meli = meli.auth_url(redirect_URI=REDIRECT_URI)
-        #url_login_oerp = "/meli_login"
-
-        results = []
-        response = meli.get("/users/"+company.mercadolibre_seller_id+"/items/search", {'access_token':meli.access_token,'offset': 0 })
-        #response = meli.get("/sites/MLA/search?seller_id="+company.mercadolibre_seller_id+"&limit=0", {'access_token':meli.access_token})
-        rjson = response.json()
-        _logger.info( rjson )
-        results = rjson['results']
-
-        if 'error' in rjson:
-            if rjson['message']=='invalid_token' or rjson['message']=='expired_token':
-                ACCESS_TOKEN = ''
-                REFRESH_TOKEN = ''
-                company.write({'mercadolibre_access_token': ACCESS_TOKEN, 'mercadolibre_refresh_token': REFRESH_TOKEN, 'mercadolibre_code': '' } )
-            return {
-	        "type": "ir.actions.act_url",
-	        "url": url_login_meli,
-	        "target": "new",}
-
-        #download?
-        if (rjson['paging']['total']>rjson['paging']['limit']):
-            pages = rjson['paging']['total']/rjson['paging']['limit']
-            ioff = rjson['paging']['limit']
-            condition_last_off = False
-            while (condition_last_off!=True):
-                response = meli.get("/users/"+company.mercadolibre_seller_id+"/items/search", {'access_token':meli.access_token,'offset': ioff })
-                rjson2 = response.json()
-                if 'error' in rjson2:
-                    if rjson2['message']=='invalid_token' or rjson2['message']=='expired_token':
-                        ACCESS_TOKEN = ''
-                        REFRESH_TOKEN = ''
-                        company.write({'mercadolibre_access_token': ACCESS_TOKEN, 'mercadolibre_refresh_token': REFRESH_TOKEN, 'mercadolibre_code': '' } )
-                    condition = True
-                    return {
-        	        "type": "ir.actions.act_url",
-        	        "url": url_login_meli,
-        	        "target": "new",}
-                else:
-                    results += rjson2['results']
-                    ioff+= rjson['paging']['limit']
-                    condition_last_off = ( ioff>=rjson['paging']['total'])
+        if pricelists:
+            if pricelists.id:
+                pricelist = pricelists.id
+            else:
+                pricelist = pricelists[0].id
+        self.meli_price = str(self.lst_price)
+        #res = {}
+        #for id in self:
+        #    res[id] = self.lst_price
+        #return res
 
 
-        _logger.info( rjson )
-        _logger.info( "("+str(rjson['paging']['total'])+") products to check...")
-        iitem = 0
-        if (results):
-            for item_id in results:
-                print item_id
-                iitem+= 1
-                _logger.info( item_id + "("+str(iitem)+"/"+str(rjson['paging']['total'])+")" )
-                posting_id = self.pool.get('product.product').search(cr,uid,[('meli_id','=',item_id)])
-                response = meli.get("/items/"+item_id, {'access_token':meli.access_token})
-                rjson3 = response.json()
-                if (posting_id):
-                    _logger.info( "Item already in database: " + str(posting_id[0]) )
-                    #print "Item already in database: " + str(posting_id[0])
-                else:
-                    idcreated = self.pool.get('product.product').create(cr,uid,{ 'name': rjson3['title'], 'meli_id': rjson3['id'] })
-                    #idcreated = self.pool.get('product.product').create(cr,uid,{ 'name': rjson3['id'], 'description': rjson3['title'], 'meli_id': rjson3['id'] })
-                    if (idcreated):
-                        _logger.info( "product created: " + str(rjson3['id']) + "-" + str( rjson3['title']) )
-                        product = product_obj.browse(cr, uid, idcreated)
-                        product_obj.product_meli_get_product( cr, uid, [idcreated] )
-        return {}
+    def product_meli_get_product( self ):
+        company = self.env.user.company_id
+        product_obj = self.env['product.product']
+        #pdb.set_trace()
+        product = self
 
-    def product_meli_get_product( self, cr, uid, ids, context=None ):
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        _logger.info("product_meli_get_product")
+        _logger.info(product)
 
-        product_template_obj = self.pool.get('product.template')
-        product_template = product_template_obj.browse(cr, uid, product.product_tmpl_id.id)
+        product_template_obj = self.env['product.template']
+        product_template = product_template_obj.browse(product.product_tmpl_id.id)
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -154,10 +85,19 @@ class product_product(osv.osv):
 
         meli = Meli(client_id=CLIENT_ID,client_secret=CLIENT_SECRET, access_token=ACCESS_TOKEN, refresh_token=REFRESH_TOKEN)
 
-        response = meli.get("/items/"+product.meli_id, {'access_token':meli.access_token})
+        try:
+            response = meli.get("/items/"+product.meli_id, {'access_token':meli.access_token})
+            #_logger.info(response)
+            rjson = response.json()
+            _logger.info(response)
+        except IOError as e:
+            print "I/O error({0}): {1}".format(e.errno, e.strerror)
+            return {}
+        except:
+            print "Rare error"
+            return {}
 
-        print "product_meli_get_product: " + response.content
-        rjson = response.json()
+
 
         des = ''
         desplain = ''
@@ -165,13 +105,19 @@ class product_product(osv.osv):
         if 'error' in rjson:
             return {}
 
+        if "content" in response:
+            _logger.info(response.content)
+        #    print "product_meli_get_product > response.content: " + response.content
+
         #TODO: traer la descripcion: con
         #https://api.mercadolibre.com/items/{ITEM_ID}/description?access_token=$ACCESS_TOKEN
-        if rjson['descriptions']:
+        if rjson and rjson['descriptions']:
             response2 = meli.get("/items/"+product.meli_id+"/description", {'access_token':meli.access_token})
             rjson2 = response2.json()
-            des = rjson2['text']
-            desplain = rjson2['plain_text']
+            if 'text' in rjson2:
+               des = rjson2['text']
+            if 'plain_text' in rjson2:
+               desplain = rjson2['plain_text']
             if (len(des)>0):
                 desplain = des
 
@@ -193,45 +139,76 @@ class product_product(osv.osv):
 
         #categories
         mlcatid = ""
+        www_cat_id = False
         if ('category_id' in rjson):
             category_id = rjson['category_id']
-            ml_cat_id = self.pool.get('mercadolibre.category').search(cr,uid,[('meli_category_id','=',category_id)])
+            ml_cat = self.env['mercadolibre.category'].search([('meli_category_id','=',category_id)])
+            ml_cat_id = ml_cat.id
             if (ml_cat_id):
-              print "category exists!" + str(ml_cat_id)
-              mlcatid = ml_cat_id[0]
+                print "category exists!" + str(ml_cat_id)
+                mlcatid = ml_cat_id
+                www_cat_id = ml_cat.public_category_id
             else:
-              print "Creating category: " + str(category_id)
-              #https://api.mercadolibre.com/categories/MLA1743
-              response_cat = meli.get("/categories/"+str(category_id), {'access_token':meli.access_token})
-              rjson_cat = response_cat.json()
-              print "category:" + str(rjson_cat)
-              fullname = ""
-              if ("path_from_root" in rjson_cat):
-                  path_from_root = rjson_cat["path_from_root"]
-                  for path in path_from_root:
-                    fullname = fullname + "/" + path["name"]
+                print "Creating category: " + str(category_id)
+                #https://api.mercadolibre.com/categories/MLA1743
+                response_cat = meli.get("/categories/"+str(category_id), {'access_token':meli.access_token})
+                rjson_cat = response_cat.json()
+                print "category:" + str(rjson_cat)
+                fullname = ""
+                if ("path_from_root" in rjson_cat):
+                    path_from_root = rjson_cat["path_from_root"]
+                    p_id = False
+                    #pdb.set_trace()
+                    for path in path_from_root:
+                        fullname = fullname + "/" + path["name"]
+                        www_cats = self.env['product.public.category']
+                        if www_cats!=False:
+                            www_cat_id = www_cats.search([('name','=',path["name"])]).id
+                            if www_cat_id==False:
+                                www_cat_fields = {
+                                  'name': path["name"],
+                                  #'parent_id': p_id,
+                                  #'sequence': 1
+                                }
+                                if p_id:
+                                    www_cat_fields['parent_id'] = p_id
+                                www_cat_id = www_cats.create((www_cat_fields)).id
+                                if www_cat_id:
+                                    _logger.info("Website Category created:"+fullname)
 
-              #fullname = fullname + "/" + rjson_cat['name']
-              print "category fullname:" + fullname
-              cat_fields = {
-                'name': fullname,
-                'meli_category_id': ''+str(category_id),
-              }
-              ml_cat_id = self.pool.get('mercadolibre.category').create(cr,uid,(cat_fields))
-              if (ml_cat_id):
-                  mlcatid = ml_cat_id
+                            p_id = www_cat_id
+
+                #fullname = fullname + "/" + rjson_cat['name']
+                #print "category fullname:" + fullname
+                cat_fields = {
+                    'name': fullname,
+                    'meli_category_id': ''+str(category_id),
+                    'public_category_id': 0,
+                }
+                if www_cat_id:
+                    cat_fields['public_category_id'] = www_cat_id
+                ml_cat_id = self.env['mercadolibre.category'].create((cat_fields)).id
+                if (ml_cat_id):
+                    mlcatid = ml_cat_id
 
         imagen_id = ''
-        if (len(rjson['pictures'])>0):
-            imagen_id = rjson['pictures'][0]['id']
+        meli_dim_str = ''
+        if ('dimensions' in rjson):
+            if (rjson['dimensions']):
+                meli_dim_str = rjson['dimensions']
+
+        if ('pictures' in rjson):
+            if (len(rjson['pictures'])>0):
+                imagen_id = rjson['pictures'][0]['id']
 
         meli_fields = {
-            'name': str(rjson['title']),
+            'name': str(rjson['title'].encode("utf-8")),
+            #'name': str(rjson['id']),
             'meli_imagen_id': imagen_id,
             'meli_post_required': True,
             'meli_id': rjson['id'],
             'meli_permalink': rjson['permalink'],
-            'meli_title': rjson['title'],
+            'meli_title': rjson['title'].encode("utf-8"),
             'meli_description': desplain,
 #            'meli_description_banner_id': ,
             'meli_category': mlcatid,
@@ -247,21 +224,34 @@ class product_product(osv.osv):
 ##            'meli_imagen_id': fields.char(string='Imagen Id', size=256),
             'meli_imagen_link': rjson['thumbnail'],
 ##            'meli_multi_imagen_id': fields.char(string='Multi Imagen Ids', size=512),
-            'meli_video': str(vid)
+            'meli_video': str(vid),
+            'meli_dimensions': meli_dim_str,
         }
+
         tmpl_fields = {
-          'name': str(rjson['title'])
+          'name': str(rjson['title'].encode("utf-8")),
+          #'name': str(rjson['id']),
+          'lst_price': rjson['price']
         }
+        #pdb.set_trace()
+        if www_cat_id!=False:
+            #assign
+            product_template.public_categ_ids = [(4,www_cat_id)]
+            #tmpl_fields["public_categ_ids"] = [(4,www_cat_id)]
+
         product.write( meli_fields )
         product_template.write( tmpl_fields )
+        if (rjson['available_quantity']>0):
+            product_template.website_published = True
+        else:
+            product_template.website_published = False
 #{"id":"MLA639109219","site_id":"MLA","title":"Disco Vinilo Queen - Rock - A Kind Of Magic","subtitle":null,"seller_id":171329758,"category_id":"MLA2038","official_store_id":null,"price":31,"base_price":31,"original_price":null,"currency_id":"ARS","initial_quantity":5,"available_quantity":5,"sold_quantity":0,"buying_mode":"buy_it_now","listing_type_id":"free","start_time":"2016-10-17T20:36:22.000Z","stop_time":"2016-12-16T20:36:22.000Z","end_time":"2016-12-16T20:36:22.000Z","expiration_time":null,"condition":"used","permalink":"http://articulo.mercadolibre.com.ar/MLA-639109219-disco-vinilo-queen-rock-a-kind-of-magic-_JM","thumbnail":"http://mla-s1-p.mlstatic.com/256905-MLA25108641321_102016-I.jpg","secure_thumbnail":"https://mla-s1-p.mlstatic.com/256905-MLA25108641321_102016-I.jpg","pictures":[{"id":"256905-MLA25108641321_102016","url":"http://mla-s1-p.mlstatic.com/256905-MLA25108641321_102016-O.jpg","secure_url":"https://mla-s1-p.mlstatic.com/256905-MLA25108641321_102016-O.jpg","size":"500x400","max_size":"960x768","quality":""},{"id":"185215-MLA25150338489_112016","url":"http://www.mercadolibre.com/jm/img?s=STC&v=O&f=proccesing_image_es.jpg","secure_url":"https://www.mercadolibre.com/jm/img?s=STC&v=O&f=proccesing_image_es.jpg","size":"500x500","max_size":"500x500","quality":""}],"video_id":null,"descriptions":[{"id":"MLA639109219-1196717922"}],"accepts_mercadopago":true,"non_mercado_pago_payment_methods":[],"shipping":{"mode":"not_specified","local_pick_up":false,"free_shipping":false,"methods":[],"dimensions":null,"tags":[]},"international_delivery_mode":"none","seller_address":{"id":193196973,"comment":"3B","address_line":"Billinghurst 1711","zip_code":"1425","city":{"id":"TUxBQlBBTDI1MTVa","name":"Palermo"},"state":{"id":"AR-C","name":"Capital Federal"},"country":{"id":"AR","name":"Argentina"},"latitude":-34.5906131,"longitude":-58.4101982,"search_location":{"neighborhood":{"id":"TUxBQlBBTDI1MTVa","name":"Palermo"},"city":{"id":"TUxBQ0NBUGZlZG1sYQ","name":"Capital Federal"},"state":{"id":"TUxBUENBUGw3M2E1","name":"Capital Federal"}}},"seller_contact":null,"location":{},"geolocation":{"latitude":-34.5906131,"longitude":-58.4101982},"coverage_areas":[],"attributes":[],"warnings":[],"listing_source":"","variations":[],"status":"active","sub_status":[],"tags":[],"warranty":null,"catalog_product_id":null,"domain_id":null,"seller_custom_field":null,"parent_item_id":null,"differential_pricing":null,"deal_ids":[],"automatic_relist":false,"date_created":"2016-10-17T20:36:22.000Z","last_updated":"2016-11-07T21:38:10.000Z"}
 
         return {}
 
-    def product_meli_login(self, cr, uid, ids, context=None ):
+    def product_meli_login(self ):
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
+        company = self.env.user.company_id
 
         REDIRECT_URI = company.mercadolibre_redirect_uri
         CLIENT_ID = company.mercadolibre_client_id
@@ -278,12 +268,14 @@ class product_product(osv.osv):
 	        "target": "new",
         }
 
-    def product_get_meli_loginstate( self, cr, uid, ids, field_name, attributes, context=None ):
+    @api.multi
+    def product_get_meli_loginstate( self ):
         # recoger el estado y devolver True o False (meli)
         #False if logged ok
         #True if need login
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
+        self.ensure_one()
+        #pdb.set_trace()
+        company = self.env.user.company_id
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -293,7 +285,7 @@ class product_product(osv.osv):
         meli = Meli(client_id=CLIENT_ID,client_secret=CLIENT_SECRET, access_token=ACCESS_TOKEN, refresh_token=REFRESH_TOKEN)
 
         ML_state = False
-        if ACCESS_TOKEN=='':
+        if ACCESS_TOKEN=='' or ACCESS_TOKEN==False:
             ML_state = True
         else:
             response = meli.get("/users/me/", {'access_token':meli.access_token} )
@@ -306,16 +298,16 @@ class product_product(osv.osv):
                     ML_state = True
                     #raise osv.except_osv( _('MELI WARNING'), _('INVALID TOKEN (must login, go to Edit Company and login):  error: %s, message: %s, status: %s') % ( rjson["error"], rjson["message"],rjson["status"],))
 
-        res = {}
-        for product in self.browse(cr,uid,ids):
-            res[product.id] = ML_state
-        return res
+        self.meli_state = ML_state
+        #res = {}
+        #for company in self:#.browse(cr,uid,ids):
+        #    res[company.id] = ML_state
+        #return res
 
-    def product_meli_status_close( self, cr, uid, ids, context=None ):
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+    def product_meli_status_close( self, ids ):
+        company = self.env.user.company_id
+        product_obj = self.env['product.product']
+        product = product_obj.browse(ids[0])
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -330,11 +322,10 @@ class product_product(osv.osv):
 
         return {}
 
-    def product_meli_status_pause( self, cr, uid, ids, context=None ):
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+    def product_meli_status_pause( self ):
+        company = self.env.user.company_id
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -349,11 +340,10 @@ class product_product(osv.osv):
 
         return {}
 
-    def product_meli_status_active( self, cr, uid, ids, context=None ):
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+    def product_meli_status_active( self ):
+        company = self.env.user.company_id
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -368,15 +358,14 @@ class product_product(osv.osv):
 
         return {}
 
-    def product_meli_delete( self, cr, uid, ids, context=None ):
+    def product_meli_delete( self ):
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        company = self.env.user.company_id
+        product_obj = self.env['product.product']
+        product = self
 
         if product.meli_status!='closed':
-            self.product_meli_status_close( cr, uid, ids, context )
+            self.product_meli_status_close( ids )
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -398,13 +387,12 @@ class product_product(osv.osv):
 
         return {}
 
-    def product_meli_upload_image( self, cr, uid, ids, context=None ):
+    def product_meli_upload_image( self ):
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
+        company = self.env.user.company_id
 
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -446,13 +434,12 @@ class product_product(osv.osv):
 
         return { 'status': 'success', 'message': 'uploaded and assigned' }
 
-    def product_meli_upload_multi_images( self, cr, uid, ids, context=None ):
+    def product_meli_upload_multi_images( self  ):
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
+        company = self.env.user.company_id
 
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -491,18 +478,19 @@ class product_product(osv.osv):
         return image_ids
 
 
-    def product_on_change_meli_banner(self, cr, uid, ids, banner_id ):
+    def product_on_change_meli_banner(self, banner_id ):
 
-        banner_obj = self.pool.get('mercadolibre.banner')
+        banner_obj = self.env['mercadolibre.banner']
 
         #solo para saber si ya habia una descripcion completada
-        product_obj = self.pool.get('product.product')
-        if len(ids):
-            product = product_obj.browse(cr, uid, ids[0])
-        else:
-            product = product_obj.browse(cr, uid, ids)
+        product_obj = self.env['product.product']
+        product = self
+        #if len(ids):
+        #    product = self
+        #else:
+        #    product = product_obj.browse(ids)
 
-        banner = banner_obj.browse( cr, uid, banner_id )
+        banner = banner_obj.browse( banner_id )
 
         #banner.description
         _logger.info( banner.description )
@@ -517,14 +505,15 @@ class product_product(osv.osv):
 
         return { 'value': { 'meli_description' : result } }
 
-    def product_get_meli_status( self, cr, uid, ids, field_name, attributes, context=None ):
+    @api.multi
+    def product_get_meli_status( self ):
+        self.ensure_one()
+        #pdb.set_trace()
+        company = self.env.user.company_id
+        warningobj = self.env['warning']
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
-        warningobj = self.pool.get('warning')
-
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -546,19 +535,22 @@ class product_product(osv.osv):
                     if len(rjson["sub_status"]) and rjson["sub_status"][0]=='deleted':
                         product.write({ 'meli_id': '' })
 
-        res = {}
-        for product in self.browse(cr,uid,ids):
-            res[product.id] = ML_status
-        return res
+        self.meli_status = ML_status
+        #res = {}
+        #for product in self:#.browse(cr,uid,ids):
+        #    res[product.id] = ML_status
+        #return res
 
-    def product_get_permalink( self, cr, uid, ids, field_name, attributes, context=None ):
+    @api.multi
+    def product_get_permalink( self ):
+        #pdb.set_trace()
+        self.ensure_one()
         ML_permalink = ''
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        company = user_obj.company_id
+        company = self.env.user.company_id
 
-        product_obj = self.pool.get('product.product')
-        product = product_obj.browse(cr, uid, ids[0])
+        product_obj = self.env['product.product']
+        product = self
 
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -582,25 +574,22 @@ class product_product(osv.osv):
                     #if len(rjson["sub_status"]) and rjson["sub_status"][0]=='deleted':
                     #    product.write({ 'meli_id': '' })
 
+        self.meli_permalink = ML_permalink
+        #res = {}
+        #for product in self:#.browse(cr,uid,ids):
+        #    res[company.id] = ML_permalink
+        #return res
 
-        res = {}
-        for product in self.browse(cr,uid,ids):
-            res[product.id] = ML_permalink
-        return res
 
-
-    def product_post(self, cr, uid, ids, context=None):
-        import pdb;pdb.set_trace();
+    def product_post(self,ids):
+        #import pdb;pdb.set_trace();
 #        product_ids = context['active_ids']
+        pdb.set_trace()
         product_ids = ids
-        product_obj = self.pool.get('product.product')
+        product_obj = self.env['product.product']
 
-        user_obj = self.pool.get('res.users').browse(cr, uid, uid)
-        #user_obj.company_id.meli_login()
-        company = user_obj.company_id
-        warningobj = self.pool.get('warning')
-
-        #company = self.pool.get('res.company').browse(cr,uid,1)
+        company = self.env.user.company_id
+        warningobj = self.env['warning']
 
         REDIRECT_URI = company.mercadolibre_redirect_uri
         CLIENT_ID = company.mercadolibre_client_id
@@ -621,7 +610,7 @@ class product_product(osv.osv):
             }
 
         for product_id in product_ids:
-            product = product_obj.browse(cr,uid,product_id)
+            product = product_obj.browse(product_id)
 
             if (product.meli_id):
                 response = meli.get("/items/%s" % product.meli_id, {'access_token':meli.access_token})
@@ -657,7 +646,7 @@ class product_product(osv.osv):
 
             #publicando imagen cargada en OpenERP
             if product.image==None:
-                return warningobj.info(cr, uid, title='MELI WARNING', message="Debe cargar una imagen de base en el producto.", message_html="" )
+                return warningobj.info( title='MELI WARNING', message="Debe cargar una imagen de base en el producto.", message_html="" )
             elif product.meli_imagen_id==False:
                 # print "try uploading image..."
                 resim = product.product_meli_upload_image()
@@ -725,11 +714,11 @@ class product_product(osv.osv):
 
 
             else:
-                return warningobj.info(cr, uid, title='MELI WARNING', message="Debe completar el campo 'Imagen_Logo' con el url: http://www.nuevohorizonte-sa.com.ar/images/logo1.png", message_html="")
+                return warningobj.info(title='MELI WARNING', message="Debe completar el campo 'Imagen_Logo' con un url", message_html="")
 
             #check fields
             if product.meli_description==False:
-                return warningobj.info(cr, uid, title='MELI WARNING', message="Debe completar el campo 'description' (en html)", message_html="")
+                return warningobj.info(title='MELI WARNING', message="Debe completar el campo 'description' (en html)", message_html="")
 
             #put for editing, post for creating
             if product.meli_id:
@@ -756,10 +745,10 @@ class product_product(osv.osv):
                     url_login_meli = meli.auth_url(redirect_URI=REDIRECT_URI)
                     #print "url_login_meli:", url_login_meli
                     #raise osv.except_osv( _('MELI WARNING'), _('INVALID TOKEN or EXPIRED TOKEN (must login, go to Edit Company and login):  error: %s, message: %s, status: %s') % ( rjson["error"], rjson["message"],rjson["status"],))
-                    return warningobj.info(cr, uid, title='MELI WARNING', message="Debe iniciar sesión en MELI.  ", message_html="")
+                    return warningobj.info( title='MELI WARNING', message="Debe iniciar sesión en MELI.  ", message_html="")
                 else:
                      #Any other errors
-                    return warningobj.info(cr, uid, title='MELI WARNING', message="Completar todos los campos!  ", message_html="<br><br>"+missing_fields )
+                    return warningobj.info( title='MELI WARNING', message="Completar todos los campos!  ", message_html="<br><br>"+missing_fields )
 
             #last modifications if response is OK
             if "id" in rjson:
@@ -767,41 +756,40 @@ class product_product(osv.osv):
 
             posting_fields = {'posting_date': str(datetime.now()),'meli_id':rjson['id'],'product_id':product.id,'name': 'Post: ' + product.meli_title }
 
-            posting_id = self.pool.get('mercadolibre.posting').search(cr,uid,[('meli_id','=',rjson['id'])])
+            posting_id = self.env['mercadolibre.posting'].search( [('meli_id','=',rjson['id'])]).id
 
             if not posting_id:
-                posting_id = self.pool.get('mercadolibre.posting').create(cr,uid,(posting_fields))
+                posting_id = self.env['mercadolibre.posting'].create((posting_fields)).id
 
 
         return {}
 
-    _columns = {
-    'meli_imagen_id': fields.char(string='Imagen Id', size=256),
-    'meli_post_required': fields.boolean(string='Este producto es publicable en Mercado Libre'),
-	'meli_id': fields.char( string='Id del item asignado por Meli', size=256),
-    'meli_permalink': fields.function( product_get_permalink, method=True, type='char',  size=256, string='PermaLink in MercadoLibre' ),
-	'meli_title': fields.char(string='Nombre del producto en Mercado Libre',size=256),
-	'meli_description': fields.html(string='Descripción'),
-    'meli_description_banner_id': fields.many2one("mercadolibre.banner","Banner"),
-	'meli_category': fields.many2one("mercadolibre.category","Categoría de MercadoLibre"),
-	'meli_listing_type': fields.selection([("free","Libre"),("bronze","Bronce"),("silver","Plata"),("gold","Oro"),("gold_premium","Gold Premium"),("gold_special","Gold Special"),("gold_pro","Oro Pro")], string='Tipo de lista'),
-	'meli_buying_mode': fields.selection( [("buy_it_now","Compre ahora"),("classified","Clasificado")], string='Método de compra'),
-	'meli_price': fields.char(string='Precio de venta', size=128),
-	'meli_price_fixed': fields.boolean(string='Price is fixed'),
-	'meli_currency': fields.selection([("ARS","Peso Argentino (ARS)")],string='Moneda (ARS)'),
-	'meli_condition': fields.selection([ ("new", "Nuevo"), ("used", "Usado"), ("not_specified","No especificado")],'Condición del producto'),
-	'meli_available_quantity': fields.integer(string='Cantidad disponible'),
-	'meli_warranty': fields.char(string='Garantía', size=256),
-	'meli_imagen_logo': fields.char(string='Imagen Logo', size=256),
-    'meli_imagen_id': fields.char(string='Imagen Id', size=256),
-    'meli_imagen_link': fields.char(string='Imagen Link', size=256),
-    'meli_multi_imagen_id': fields.char(string='Multi Imagen Ids', size=512),
-	'meli_video': fields.char( string='Video (id de youtube)', size=256),
-	'meli_state': fields.function( product_get_meli_loginstate, method=True, type='boolean', string="Inicio de sesión requerida", store=False ),
-    'meli_status': fields.function( product_get_meli_status, method=True, type='char', size=128, string="Estado del producto en MLA", store=False ),
+    meli_imagen_id = fields.Char(string='Imagen Id', size=256);
+    meli_post_required = fields.Boolean(string='Este producto es publicable en Mercado Libre');
+    meli_id = fields.Char( string='Id del item asignado por Meli', size=256);
+    meli_permalink = fields.Char( compute=product_get_permalink, size=256, string='PermaLink in MercadoLibre' );
+    meli_title = fields.Char(string='Nombre del producto en Mercado Libre',size=256);
+    meli_description = fields.Html(string='Descripción');
+    meli_description_banner_id = fields.Many2one("mercadolibre.banner","Banner");
+    meli_category = fields.Many2one("mercadolibre.category","Categoría de MercadoLibre");
+    meli_listing_type = fields.Selection([("free","Libre"),("bronze","Bronce"),("silver","Plata"),("gold","Oro"),("gold_premium","Gold Premium"),("gold_special","Gold Special"),("gold_pro","Oro Pro")], string='Tipo de lista');
+    meli_buying_mode = fields.Selection( [("buy_it_now","Compre ahora"),("classified","Clasificado")], string='Método de compra');
+    meli_price = fields.Char(string='Precio de venta', size=128);
+    meli_price_fixed = fields.Boolean(string='Price is fixed');
+    meli_currency = fields.Selection([("ARS","Peso Argentino (ARS)")],string='Moneda (ARS)');
+    meli_condition = fields.Selection([ ("new", "Nuevo"), ("used", "Usado"), ("not_specified","No especificado")],'Condición del producto');
+    meli_available_quantity = fields.Integer(string='Cantidad disponible');
+    meli_warranty = fields.Char(string='Garantía', size=256);
+    meli_imagen_logo = fields.Char(string='Imagen Logo', size=256);
+    meli_imagen_id = fields.Char(string='Imagen Id', size=256);
+    meli_imagen_link = fields.Char(string='Imagen Link', size=256);
+    meli_multi_imagen_id = fields.Char(string='Multi Imagen Ids', size=512);
+    meli_video = fields.Char( string='Video (id de youtube)', size=256);
+    meli_state = fields.Boolean( compute=product_get_meli_loginstate, string="Inicio de sesión requerida", store=False );
+    meli_status = fields.Char( compute=product_get_meli_status, size=128, string="Estado del producto en MLA", store=False );
+    meli_dimensions = fields.Char( string="Dimensiones del producto", size=128);
 	### Agregar imagen/archivo uno o mas, y la descripcion en HTML...
 	# TODO Agregar el banner
-    }
 
     _defaults = {
         'meli_imagen_logo': 'None',

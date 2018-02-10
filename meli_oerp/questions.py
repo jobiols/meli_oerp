@@ -19,7 +19,7 @@
 #
 ##############################################################################
 
-from openerp.osv import fields, osv
+from odoo import fields, osv, models
 import logging
 import meli_oerp_config
 
@@ -28,25 +28,20 @@ from melisdk.meli import Meli
 
 #https://api.mercadolibre.com/questions/search?item_id=MLA508223205
 
-class mercadolibre_questions(osv.osv):
+class mercadolibre_questions(models.Model):
 	_name = "mercadolibre.questions"
 	_description = "Preguntas en MercadoLibre"
-    
-	_columns = {
-        'posting_id': fields.many2one("mercadolibre.posting","Posting"),
-        'question_id': fields.char('Question Id'),
-        'date_created': fields.date('Creation date'),
-        'item_id': fields.char(string="Item ID",size=255),
-        'seller_id': fields.char(string="Seller ID",size=255),
-        'text': fields.text("Question Text"),
-        'status': fields.selection( [("UNANSWERED","Question is not answered yet."),("ANSWERED","Question was answered."),("CLOSED_UNANSWERED","The item is closed and the question was never answered."),("UNDER_REVIEW","The item is under review and the question too.")], string='Question Status'),
-        'answer_date_created': fields.date('Answer creation date'),
-        'answer_status': fields.selection( [("ACTIVE","Active"),("DISABLED","Disabled")], string='Answer Status'),
-        'answer_text': fields.text("Answer Text"),
 
-	}
-
-
+	posting_id = fields.Many2one("mercadolibre.posting","Posting");
+	question_id = fields.Char('Question Id');
+	date_created = fields.Date('Creation date');
+	item_id = fields.Char(string="Item ID",size=255);
+	seller_id = fields.Char(string="Seller ID",size=255);
+	text = fields.Text("Question Text");
+	status = fields.Selection( [("UNANSWERED","Question is not answered yet."),("ANSWERED","Question was answered."),("CLOSED_UNANSWERED","The item is closed and the question was never answered."),("UNDER_REVIEW","The item is under review and the question too.")], string='Question Status');
+	answer_date_created = fields.Date('Answer creation date');
+	answer_status = fields.Selection( [("ACTIVE","Active"),("DISABLED","Disabled")], string='Answer Status');
+	answer_text = fields.Text("Answer Text");
+	
 
 mercadolibre_questions()
-

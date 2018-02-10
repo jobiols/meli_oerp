@@ -7,7 +7,7 @@
             <field name="model">mercadolibre.questions</field>
             <field name="type">tree</field>
             <field name="arch" type="xml">
-                <tree string="Questions">
+                <tree string="Questions" >
                     <field name="posting_id"/>
                     <field name="question_id"/>
                     <field name="date_created"/>
@@ -23,16 +23,15 @@
         </record>
 
 
-        <record id="meli_questions_search_view" model="ir.ui.view">
-            <field name="name">MercadoLibre Questions - Search</field>
-            <field name="model">mercadolibre.questions</field>
-            <field name="arch" type="xml">
-                <search string="Search MercadoLibre Questions Information">
-                    <filter string='Status' icon="terp-mrp" domain="[]"
-                            context="{'group_by' : 'status'}"/>
-                </search>
-            </field>
-        </record>
+    <record id="meli_questions_search_view" model="ir.ui.view">
+        <field name="name">MercadoLibre Questions - Search</field>
+        <field name="model">mercadolibre.questions</field>
+        <field name="arch" type="xml">
+	    <search string="Search MercadoLibre Questions Information">
+                <filter string='Status' icon="terp-mrp" domain="[]" context="{'group_by' : 'status'}"/>
+	    </search>
+        </field>
+    </record>
 
 
         <record model="ir.actions.act_window" id="action_meli_questions_tree">
@@ -45,13 +44,12 @@
         </record>
 
 
-        <menuitem id="menu_meli" name="MercadoLibre"
-                  parent="base.menu_base_partner" sequence="9"/>
+        <menuitem id="menu_meli" name="MercadoLibre" parent="sales_team.menu_base_partner" sequence="9"/>
 
         <menuitem id="menu_meli_questions"
-                  action="action_meli_questions_tree"
-                  parent="menu_meli"
-                  name="Questions"/>
+            action="action_meli_questions_tree"
+            parent="menu_meli"
+            name="Questions" />
 
     </data>
 </openerp>

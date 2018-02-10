@@ -1,10 +1,10 @@
-from openerp import http
+from odoo import http, api
 
 import melisdk
 from melisdk.meli import Meli
 
-from openerp.osv import fields, osv
-from openerp.http import request
+from odoo import fields, osv
+from odoo.http import request
 
 
 from meli_oerp_config import *
@@ -14,7 +14,8 @@ class MercadoLibre(http.Controller):
     def index(self):
 
         cr, uid, context = request.cr, request.uid, request.context
-        company = request.registry.get('res.company').browse(cr,uid,1)
+        #company = request.registry.get('res.company').browse(cr,uid,1)
+        company = request.env.user.company_id
         REDIRECT_URI = company.mercadolibre_redirect_uri
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -36,7 +37,8 @@ class MercadoLibreLogin(http.Controller):
     @http.route(['/meli_login'], type='http', auth="user", methods=['GET'], website=True)
     def index(self, **codes ):
         cr, uid, context = request.cr, request.uid, request.context
-        company = request.registry.get('res.company').browse(cr,uid,1)
+        #company = request.registry.get('res.company').browse(cr,uid,1)
+        company = request.env.user.company_id
         REDIRECT_URI = company.mercadolibre_redirect_uri
         CLIENT_ID = company.mercadolibre_client_id
         CLIENT_SECRET = company.mercadolibre_secret_key
@@ -46,7 +48,7 @@ class MercadoLibreLogin(http.Controller):
         codes.setdefault('code','none')
         codes.setdefault('error','none')
         if codes['error']!='none':
-            message = "ERROR: %s" % codes['error']            
+            message = "ERROR: %s" % codes['error']
             return "<h1>"+message+"</h1><br/><a href='"+meli.auth_url(redirect_URI=REDIRECT_URI)+"'>Login</a>"
 
         if codes['code']!='none':
@@ -69,13 +71,3 @@ class MercadoLibreLogout(http.Controller):
     @http.route('/meli_logout/', auth='public')
     def index(self):
         return "LOGOUT: MercadoLibre for Odoo 8 - Moldeo Interactive"
-
-
-
-
-
-
-
-
-
-
