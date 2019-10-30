@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openerp>
+    <data>
+
+        <record model="ir.ui.view" id="view_meli_product_public_category_form_view">
+          <field name="name">mercadolibre.website.category.form</field>
+          <field name="model">product.public.category</field>
+          <field name="inherit_id" ref="website_sale.product_public_category_form_view" />
+          <field name="arch" type="xml">
+            <xpath expr="//field[@name='parent_id']" position="after">
+               <field name="mercadolibre_category"/>
+             </xpath>
+          </field>
+        </record>
+
+        <record model="ir.ui.view" id="view_meli_product_attribute_view">
+          <field name="name">mercadolibre.category.attribute.tree</field>
+          <field name="model">product.attribute</field>
+          <field name="inherit_id" ref="product.attribute_tree_view" />
+          <field name="arch" type="xml">
+            <!--<xpath expr="//field[@name='create_variant']" position="after">
+               <field name="meli_default_id_attribute"/>
+             </xpath>-->
+             <field name="create_variant" position="after">
+               <field name="meli_default_id_attribute"/>
+             </field>
+          </field>
+        </record>
+
+        <record model="ir.ui.view" id="view_meli_category_tree">
+            <field name="name">mercadolibre.category.tree</field>
+            <field name="model">mercadolibre.category</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Categorías" >
+                    <field name="name"/>
+                    <field name="meli_category_id"/>
+                    <field name="meli_category_attributes" widget="url"/>
+                    <field name="public_category_id"/>
+                    <field name="is_branch"/>
+                </tree>
+            </field>
+        </record>
+
+
+        <record model="ir.actions.act_window" id="action_meli_categories_tree">
+            <field name="name">Categorías</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">mercadolibre.category</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <menuitem id="menu_meli_categories"
+            action="action_meli_categories_tree"
+            parent="menu_meli"
+            name="Categorías" />
+
+    </data>
+</openerp>
